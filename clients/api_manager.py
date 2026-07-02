@@ -9,3 +9,7 @@ class ApiManager:
         self.auth_api = AuthApi(session)
         self.user_api = UserApi(session)
         self.movies = MoviesApi(session)
+
+    def close_session(self):
+        """Закрывает текущую HTTP-сессию для освобождения ресурсов"""
+        self.session.close()

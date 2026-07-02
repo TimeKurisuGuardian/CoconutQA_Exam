@@ -3,6 +3,8 @@ import requests
 import pytest
 from clients.api_manager import ApiManager
 from utils.data_generator import DataGenerator
+from entities.user import User
+from resources.user_creds import SuperAdminCreds
 
 
 # Главный менеджер (Общий)
@@ -71,3 +73,49 @@ def authenticated_admin(api_manager):
     # После теста очищаем заголовок авторизации
     if "Authorization" in api_manager.movies.session.headers:
         del api_manager.movies.session.headers["Authorization"]
+
+@pytest.fixture
+def user_session():
+    user_pool = []
+
+    def _create_user_session():
+        session = requests.Session()
+        user_api_manager = ApiManager(session)
+        user_pool.append(user_api_manager)
+        return user_api_manager
+
+    yield _create_user_session
+
+    for user_api in user_pool:
+        user_api.close_session()
+
+@pytest.fixture
+def super_admin(user_session):
+    new_session = user_session()
+
+    admin_user = User(
+        email=SuperAdminCreds.USERNAME,
+        password=SuperAdminCreds.PASSWORD,
+        roles=["[SUPER_ADMIN]"],
+        api=new_session
+    )
+
+    admin_creds = {
+        "email": admin_user.email,
+        "password": admin_user.password
+    }
+    admin_user.api.auth_api.authenticate(admin_creds)
+
+    return admin_user
+
+@pytest.fixture(scope="function")
+def creation_user_data(test_user):
+    """Готовит расширенные данные для создания юзера через админку"""
+    updated_data = test_user.copy()
+
+    updated_data.update({
+        "verified": True,
+        "banned": False
+    })
+
+    return updated_data

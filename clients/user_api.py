@@ -29,3 +29,12 @@ class UserApi(CustomRequester):
         for user_id in user_ids:
             # вызываем наш же одиночный метод для каждого id
             self.delete_user(user_id, **kwargs)
+
+    def create_user(self, user_data, expected_status=201):
+        """Создание нового пользователя админом (POST /user)"""
+        return self.send_request(
+            method="POST",
+            endpoint=f"{USER}",
+            data=user_data,
+            expected_status=expected_status
+        )
