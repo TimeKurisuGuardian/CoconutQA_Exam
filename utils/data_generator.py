@@ -1,26 +1,28 @@
-# utils/data_generator.py
 import random
 from faker import Faker
 
-# Инициализируем фейкер один раз для всего класса
+# Инициализация библиотеки Faker для генерации тестовых данных
 faker = Faker()
 
 class DataGenerator:
 
     @staticmethod
     def generate_random_email() -> str:
-        # Faker сам создаст красивый валидный email (например, pavel.kotlyarov@example.com)
+        """Генерация валидного email адреса."""
         return faker.email()
 
     @staticmethod
     def generate_random_name() -> str:
-        # Генерирует полноценное ФИО (Имя + Фамилия)
+        """Генерация полного имени (First Name + Last Name)."""
         return faker.name()
 
     @staticmethod
     def generate_random_password() -> str:
-        # Генерируем пароль длиной 12 символов, в котором ОБЯЗАТЕЛЬНО будут цифры,
-        # большие буквы, маленькие буквы, и ВЫКЛЮЧАЕМ спецсимволы (они нам рушат валидацию)
+        """
+        Генерация безопасного пароля.
+        Пароль содержит буквенно-цифровые символы разного регистра
+        для успешного прохождения валидации на бэкенде Cinescope.
+        """
         return faker.password(
             length=12,
             digits=True,
@@ -31,12 +33,17 @@ class DataGenerator:
 
     @staticmethod
     def generate_random_movie_data() -> dict:
+        """
+        Генерация структуры данных для создания фильма.
+        Поля валидируются в соответствии со спецификацией API Cinescope,
+        включая валидные значения для поля location (MSK/SPB).
+        """
         return {
             "name": f"The Secret of {faker.word().capitalize()}",
             "price": random.randint(150, 500),
             "description": faker.sentence(),
             "imageUrl": "https://images.unsplash.com/photo-1536440136628-849c177e76a1",
-            "location": random.choice(["MSK", "NSK", "SPB"]),
+            "location": random.choice(["MSK", "SPB"]),
             "published": True,
-            "genreId": random.randint(1, 5)  # Обычно ID популярных жанров
+            "genreId": random.randint(1, 5)
         }

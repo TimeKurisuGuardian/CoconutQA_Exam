@@ -1,10 +1,14 @@
-# custom_requester/custom_requester.py
 import json
 import logging
 import os
 
 
 class CustomRequester:
+    """
+    Базовый класс для отправки HTTP-запросов.
+    Обеспечивает автоматическую валидацию статус-кодов,
+    логирование запросов/ответов в формате curl и управление заголовками сессии.
+    """
     base_headers = {
         "Content-Type": "application/json",
         "Accept": "application/json"
@@ -18,24 +22,38 @@ class CustomRequester:
         self.logger = logging.getLogger(__name__)
 
     def send_request(self, method, endpoint, data=None, params=None, expected_status=200, need_logging=True, **kwargs):
+        """
+        Универсальный метод для отправки HTTP-запросов через текущую сессию.
+        Выполняет логирование и проверку соответствия фактического статус-кода ожидаемому.
+        """
         url = f"{self.base_url}{endpoint}"
 
-        # Передаем **kwargs в сам requests — они развернутся в timeout=5, verify=False и т.д.
+        # Передача параметров в requests с автоматической конвертацией данных в JSON
         response = self.session.request(method, url, json=data, params=params, **kwargs)
 
         if need_logging:
             self.log_request_and_response(response)
 
         if response.status_code != expected_status:
+            # Принудительный вывод тела ошибки в консоль при несовпадении статус-кода
+            print("\n" + "=" * 20 + " БЭКЕНД ВЕРНУЛ ОШИБКУ " + "=" * 20)
+            print(response.text)
+            print("=" * 62 + "\n")
+
             raise ValueError(
                 f"Unexpected status code: {response.status_code}. Expected: {expected_status}"
             )
         return response
 
     def _update_session_headers(self, headers: dict):
+        """Обновление заголовков текущей HTTP-сессии (например, добавление Bearer токена)."""
         self.session.headers.update(headers)
 
     def log_request_and_response(self, response):
+        """
+        Форматированное логирование отправленного запроса и полученного ответа.
+        Запрос преобразуется в готовый curl-командный формат для удобного дебага.
+        """
         try:
             request = response.request
             GREEN = '\033[32m'
