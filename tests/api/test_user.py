@@ -22,3 +22,8 @@ class TestUser:
 
         assert response_by_id == response_by_email, "Содержание ответов должно быть идентичным"
         assert response_by_id.get('id') == created_user_response['id']
+
+    def test_get_user_by_id_common_user_forbidden(self, common_user):
+        """Негативный: Обычный юзер получает 403 при попытке запросить информацию о юзере"""
+
+        common_user.api.user_api.get_user_info(common_user.email, expected_status=403)

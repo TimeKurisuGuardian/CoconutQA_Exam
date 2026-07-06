@@ -1,4 +1,9 @@
+import os
+from dotenv import load_dotenv
+
+# Загружаем переменные из файла .env в окружение системы
+load_dotenv()
+
 class SuperAdminCreds:
-    """Хранилище учетных данных для пользователя с правами суперадминистратора"""
-    USERNAME = 'api1@gmail.com'
-    PASSWORD = 'тут_секретный_пароль'
+    USERNAME = os.getenv('SUPER_ADMIN_USERNAME')
+    PASSWORD = os.getenv('SUPER_ADMIN_PASSWORD')
