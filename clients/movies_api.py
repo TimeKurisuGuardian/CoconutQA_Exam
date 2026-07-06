@@ -1,4 +1,3 @@
-# clients/movies_api.py
 from custom_requester.custom_requester import CustomRequester
 from config.base_urls import MOVIES_BASE_URL
 
@@ -8,7 +7,7 @@ class MoviesApi(CustomRequester):
     def __init__(self, session):
         super().__init__(session=session, base_url=MOVIES_BASE_URL)
 
-    def get_movies(self, params=None, expected_status=201, **kwargs):
+    def get_movies(self, params=None, expected_status=200, **kwargs): # Поменяли дефолт на 200
         """1. GET /movies с поддержкой фильтров через params"""
         return self.send_request(
             method="GET",
@@ -18,7 +17,7 @@ class MoviesApi(CustomRequester):
             **kwargs
         )
 
-    def create_movie(self, movie_data, expected_status=200, **kwargs):
+    def create_movie(self, movie_data, expected_status=201, **kwargs): # Поменяли дефолт на 201
         """2. POST /movies — Создание фильма"""
         return self.send_request(
             method="POST",
@@ -32,7 +31,7 @@ class MoviesApi(CustomRequester):
         """PATCH /movies/{id} — Редактирование фильма"""
         return self.send_request(
             method="PATCH",
-            endpoint=f"{MOVIES}/{movie_id}",  # ID передается в URL
+            endpoint=f"{MOVIES}/{movie_id}",
             data=movie_data,
             expected_status=expected_status,
             **kwargs
