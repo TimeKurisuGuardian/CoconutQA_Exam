@@ -1,16 +1,21 @@
-# conftest.py
 import requests
 import pytest
 from clients.api_manager import ApiManager
 from utils.data_generator import DataGenerator
 from entities.user import User
 from resources.user_creds import SuperAdminCreds
-from utils.constants.roles import Roles
+# Полностью перешли на единый Enum из нашей Pydantic модели, старый Roles удален
+from models.user import UserCreationModel, UserRole
+import time
+import os
 
+# =====================================================================
+# СЕТЕВЫЕ СЕССИИ И МЕНЕДЖЕРЫ API
+# =====================================================================
 
-# Главный менеджер (Общий)
 @pytest.fixture(scope="session")
 def session():
+    """Создает единую HTTP-сессию на весь запуск тестов (Session-scope)"""
     http_session = requests.Session()
     yield http_session
     http_session.close()
@@ -18,49 +23,91 @@ def session():
 
 @pytest.fixture(scope="session")
 def api_manager(session):
+    """Инициализирует общий менеджер API-клиентов для взаимодействия со стендом"""
     return ApiManager(session)
 
 
-# ВАРИАНТ 2: Чистый, неавторизованный менеджер (для тестов без токена)
-@pytest.fixture(scope="function")  # Создаётся КАЖДЫЙ РАЗ заново, с чистыми заголовками!
+@pytest.fixture(scope="function")
 def unauthenticated_api_manager():
+    """
+    Неавторизованный менеджер. Создаётся заново на каждый тест (Function-scope).
+    Используется для проверки негативных сценариев без токена авторизации.
+    """
     with requests.Session() as clean_session:
         yield ApiManager(clean_session)
 
 
-# Фикстура генерации данных
+# =====================================================================
+# ГЕНЕРАЦИЯ ДАННЫХ ПОЛЬЗОВАТЕЛЕЙ ЧЕРЕЗ PYDANTIC V2
+# =====================================================================
+
 @pytest.fixture(scope="function")
-def test_user():
+def test_user() -> UserCreationModel:
+    """
+    Базовая фикстура: Генерирует случайные валидные данные нового пользователя.
+    Возвращает строгий объект Pydantic модели UserCreationModel.
+    """
     password = DataGenerator.generate_random_password()
-    return {
-        "email": DataGenerator.generate_random_email(),
-        "fullName": DataGenerator.generate_random_name(),
-        "password": password,
-        "passwordRepeat": password,
-        "roles": ["USER"]
-    }
+    unique_suffix = int(time.time())  # Таймстамп для уникальности
+    return UserCreationModel(
+        email=f"pavel_{unique_suffix}_{DataGenerator.generate_random_email()}",  # Уникализировали почту!
+        fullName=DataGenerator.generate_random_name(),
+        password=password,
+        passwordRepeat=password,
+        roles=[UserRole.USER]
+    )
 
 
-# Фикстура, которая регистрирует И СРАЗУ авторизует сессию
+@pytest.fixture(scope="function")
+def creation_user_data(test_user) -> UserCreationModel:
+    """
+    Админская фикстура данных: берет базового пользователя и добавляет ему
+    флаги верификации и блокировки через встроенный метод копирования Pydantic.
+    """
+    return test_user.model_copy(update={
+        "verified": True,
+        "banned": False
+    })
+
+
+# =====================================================================
+# ФИКСТУРЫ АВТОРИЗАЦИИ И СЛОЖНЫХ РОЛЕЙ (ОБЪЕКТЫ USER)
+# =====================================================================
+
 @pytest.fixture(scope="function")
 def authenticated_user(api_manager, test_user):
-    # 1. Регистрируем пользователя
+    """
+    Быстрая регистрация + Авторизация.
+    Регистрирует обычного пользователя на бэкенде и сразу вшивает токен в сессию.
+    Возвращает словарь (оставлено для совместимости со старыми тестами курса).
+    """
+    # Наш CustomRequester сам поймет, что пришла модель, и переведет её в нужный формат
     response = api_manager.auth_api.register_user(test_user).json()
-    test_user["id"] = response["id"]
 
-    # 2. Сразу вызываем метод аутентификации, чтобы вшить токен в сессию
-    api_manager.auth_api.authenticate(test_user)
+    # Из ответа вытаскиваем сгенерированный сервером id
+    user_dict = test_user.model_dump()
+    user_dict["id"] = response["id"]
 
-    # 3. Возвращаем словарь с моими данными(включая айди)
-    return test_user
+    # Вшиваем токен авторизации в сессию
+    api_manager.auth_api.authenticate(user_dict)
+    return user_dict
 
 
 @pytest.fixture(scope="function")
 def authenticated_admin(api_manager):
-    """Фикстура для авторизации под SUPER_ADMIN (использует креды из ТЗ)"""
+    """Фикстура для авторизации под SUPER_ADMIN (Данные берутся БЕЗОПАСНО из .env)"""
+
+    # Забираем переменные окружения, которые загружает pytest-dotenv или твоя система
+    admin_email = os.environ.get("SUPER_ADMIN_USERNAME")
+    admin_password = os.environ.get("SUPER_ADMIN_PASSWORD")
+
+    # Перестраховка: если .env не прочитался, тест упадет с понятной ошибкой
+    if not admin_email or not admin_password:
+        raise ValueError("Креды админа не найдены в переменных окружения! Проверь файл .env")
+
     admin_creds = {
-        "email": "api1@gmail.com",
-        "password": "asdqwe123Q"
+        "email": admin_email,
+        "password": admin_password
     }
 
     response = api_manager.auth_api.login_user(admin_creds, expected_status=201)
@@ -75,8 +122,10 @@ def authenticated_admin(api_manager):
     if "Authorization" in api_manager.movies.session.headers:
         del api_manager.movies.session.headers["Authorization"]
 
+
 @pytest.fixture
 def user_session():
+    """Пул изолированных сессий для реализации параллельных сессий пользователей в тестах"""
     user_pool = []
 
     def _create_user_session():
@@ -87,93 +136,80 @@ def user_session():
 
     yield _create_user_session
 
+    # Пост-условие: закрываем все созданные сессии пользователей
     for user_api in user_pool:
         user_api.close_session()
 
 
 @pytest.fixture
 def super_admin(user_session):
-
+    """Создает полноценный объект модели User с правами SUPER_ADMIN на выделенной сессии"""
     new_session = user_session()
 
-    super_admin = User(
+    super_admin_obj = User(
         email=SuperAdminCreds.USERNAME,
         password=SuperAdminCreds.PASSWORD,
-        roles=[Roles.SUPER_ADMIN.value],
+        roles=[UserRole.SUPER_ADMIN],
         api=new_session
     )
 
-    # Жестко передаем правильный словарь для вшивания токена SUPER_ADMIN!
-    super_admin.api.auth_api.authenticate({
+    # Проходим аутентификацию на сервере для получения Bearer токена
+    super_admin_obj.api.auth_api.authenticate({
         "email": SuperAdminCreds.USERNAME,
         "password": SuperAdminCreds.PASSWORD
     })
-    return super_admin
+    return super_admin_obj
 
-@pytest.fixture(scope="function")
-def creation_user_data(test_user):
-    """Готовит расширенные данные для создания юзера через админку"""
-    updated_data = test_user.copy()
-
-    updated_data.update({
-        "verified": True,
-        "banned": False
-    })
-
-    return updated_data
 
 @pytest.fixture
 def common_user(user_session, super_admin, creation_user_data):
-    """Создаёт и авторизует обычного пользователя с ролью USER"""
+    """Сценарий: Супер-админ создает в базе обычного пользователя (USER), а тот авторизуется"""
     new_session = user_session()
 
-    # Создаем объект модели User для обычного юзера
+    # Инициализируем объект нашей сущности User
     user = User(
-        email=creation_user_data['email'],
-        password=creation_user_data['password'],
-        roles=[Roles.USER.value],
-        api = new_session
+        email=creation_user_data.email,
+        password=creation_user_data.password,
+        roles=[UserRole.USER],
+        api=new_session
     )
 
-    # ВАЖНО: Супер-админ создает этого юзера на бэкенде!
+    # Супер-админ отправляет запрос на создание этого пользователя на бэкенде
     super_admin.api.user_api.create_user(creation_user_data)
 
-    # Теперь сам юзер логинится, чтобы получить свой токен
-    # Для этого передаем словарь с его кредами
+    # Сам созданный пользователь логинится в свою сессию
     user.api.auth_api.authenticate({
         "email": user.email,
         "password": user.password
     })
-
     return user
+
 
 @pytest.fixture
 def admin_user(user_session, super_admin, test_user):
-    """Практическое задание: создает и авторизует пользователя с ролью АДМИН"""
+    """Практическое задание: Создание и авторизация пользователя с ролью АДМИН"""
     new_session = user_session()
 
-    # Генерируем данные для админа, но меняем роль на АДМИН
-    admin_data = test_user.copy()
-    admin_data.update({
-        "roles": [Roles.ADMIN.value],
+    # С помощью Pydantic v2 меняем базовую роль на ADMIN
+    admin_data = test_user.model_copy(update={
+        "roles": [UserRole.ADMIN],
         "verified": True,
         "banned": False
     })
 
     user = User(
-        email=admin_data['email'],
-        password=admin_data['password'],
-        roles=[Roles.ADMIN.value],
+        email=admin_data.email,
+        password=admin_data.password,
+        roles=[UserRole.ADMIN],
         api=new_session
     )
 
-    # Супер-админ создает этого админа на бэкенде
+    # Создаем админа в базе руками супер-администратора
     super_admin.api.user_api.create_user(admin_data)
 
-    # бычный админ логинится и вшивает свой токен
+    # Авторизуем админа
     user.api.auth_api.authenticate({
         "email": user.email,
         "password": user.password
     })
-
     return user
