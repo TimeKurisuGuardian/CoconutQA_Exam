@@ -77,9 +77,6 @@ class CustomRequester:
         """
         try:
             request = response.request
-            GREEN = '\033[32m'
-            RED = '\033[31m'
-            RESET = '\033[0m'
 
             # Вытаскиваем имя текущего запущенного теста из окружения Pytest
             full_test_name = f"pytest {os.environ.get('PYTEST_CURRENT_TEST', '').replace(' (call)', '')}"
