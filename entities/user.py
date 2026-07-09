@@ -1,17 +1,13 @@
-from clients.api_manager import ApiManager
-
 class User:
     """
-    Класс, описывающий сущность пользователя в системе.
-    Объединяет учетные данные, роли и персональный экземпляр ApiManager
-    для выполнения изолированных запросов.
+        Класс, описывающий сущность пользователя в системе.
+        Объединяет учетные данные и роли пользователя.
     """
 
-    def __init__(self, email: str, password: str, roles: list, api: ApiManager):
+    def __init__(self, email: str, password: str, roles: list):
         self.email = email
         self.password = password
         self.roles = roles
-        self.api = api
 
     @property
     def creds(self):

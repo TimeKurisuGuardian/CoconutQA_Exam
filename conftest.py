@@ -122,94 +122,88 @@ def authenticated_admin(api_manager):
     if "Authorization" in api_manager.movies.session.headers:
         del api_manager.movies.session.headers["Authorization"]
 
+# =====================================================================
+# ФИКСТУРЫ ИЗОЛИРОВАННЫХ СЕССИЙ ДЛЯ СЛОЖНЫХ РОЛЕЙ
+# =====================================================================
 
 @pytest.fixture
-def user_session():
-    """Пул изолированных сессий для реализации параллельных сессий пользователей в тестах"""
-    user_pool = []
+def super_admin(session):
+    """Создает полноценный объект модели User с правами SUPER_ADMIN и авторизует сессию"""
+    # Шаг 1: Инициализируем менеджер API на базе общей сессии
+    api_manager = ApiManager(session)
 
-    def _create_user_session():
-        session = requests.Session()
-        user_api_manager = ApiManager(session)
-        user_pool.append(user_api_manager)
-        return user_api_manager
-
-    yield _create_user_session
-
-    # Пост-условие: закрываем все созданные сессии пользователей
-    for user_api in user_pool:
-        user_api.close_session()
-
-
-@pytest.fixture
-def super_admin(user_session):
-    """Создает полноценный объект модели User с правами SUPER_ADMIN на выделенной сессии"""
-    new_session = user_session()
-
-    super_admin_obj = User(
-        email=SuperAdminCreds.USERNAME,
-        password=SuperAdminCreds.PASSWORD,
-        roles=[UserRole.SUPER_ADMIN],
-        api=new_session
-    )
-
-    # Проходим аутентификацию на сервере для получения Bearer токена
-    super_admin_obj.api.auth_api.authenticate({
+    # Шаг 2: Проходим аутентификацию под супер-админом
+    api_manager.auth_api.authenticate({
         "email": SuperAdminCreds.USERNAME,
         "password": SuperAdminCreds.PASSWORD
     })
+
+    # Шаг 3: Создаем чистую сущность пользователя (теперь без передачи api!)
+    super_admin_obj = User(
+        email=SuperAdminCreds.USERNAME,
+        password=SuperAdminCreds.PASSWORD,
+        roles=[UserRole.SUPER_ADMIN]
+    )
     return super_admin_obj
 
 
 @pytest.fixture
-def common_user(user_session, super_admin, creation_user_data):
-    """Сценарий: Супер-админ создает в базе обычного пользователя (USER), а тот авторизуется"""
-    new_session = user_session()
+def common_user(session, creation_user_data):
+    """Сценарий: Создание в базе обычного пользователя (USER) и его авторизация"""
+    api_manager = ApiManager(session)
 
-    # Инициализируем объект нашей сущности User
+    # Шаг 1: Супер-админ (используем его креды напрямую через константы) создает пользователя на бэкенде
+    # Сначала авторизуем сессию как супер-админ, чтобы создать юзера
+    api_manager.auth_api.authenticate({
+        "email": SuperAdminCreds.USERNAME,
+        "password": SuperAdminCreds.PASSWORD
+    })
+    api_manager.user_api.create_user(creation_user_data)
+
+    # Шаг 2: Авторизуем эту же сессию под только что созданным пользователем
+    api_manager.auth_api.authenticate({
+        "email": creation_user_data.email,
+        "password": creation_user_data.password
+    })
+
+    # Шаг 3: Возвращаем чистый объект сущности пользователя
     user = User(
         email=creation_user_data.email,
         password=creation_user_data.password,
-        roles=[UserRole.USER],
-        api=new_session
+        roles=[UserRole.USER]
     )
-
-    # Супер-админ отправляет запрос на создание этого пользователя на бэкенде
-    super_admin.api.user_api.create_user(creation_user_data)
-
-    # Сам созданный пользователь логинится в свою сессию
-    user.api.auth_api.authenticate({
-        "email": user.email,
-        "password": user.password
-    })
     return user
 
 
 @pytest.fixture
-def admin_user(user_session, super_admin, test_user):
+def admin_user(session, test_user):
     """Практическое задание: Создание и авторизация пользователя с ролью АДМИН"""
-    new_session = user_session()
+    api_manager = ApiManager(session)
 
-    # С помощью Pydantic v2 меняем базовую роль на ADMIN
+    # Шаг 1: Подготавливаем данные админа через Pydantic v2
     admin_data = test_user.model_copy(update={
         "roles": [UserRole.ADMIN],
         "verified": True,
         "banned": False
     })
 
+    # Шаг 2: Авторизуемся супер-админом и создаем нового админа в базе
+    api_manager.auth_api.authenticate({
+        "email": SuperAdminCreds.USERNAME,
+        "password": SuperAdminCreds.PASSWORD
+    })
+    api_manager.user_api.create_user(admin_data)
+
+    # Шаг 3: Переавторизуем сессию под новым админом
+    api_manager.auth_api.authenticate({
+        "email": admin_data.email,
+        "password": admin_data.password
+    })
+
+    # Шаг 4: Возвращаем объект сущности
     user = User(
         email=admin_data.email,
         password=admin_data.password,
-        roles=[UserRole.ADMIN],
-        api=new_session
+        roles=[UserRole.ADMIN]
     )
-
-    # Создаем админа в базе руками супер-администратора
-    super_admin.api.user_api.create_user(admin_data)
-
-    # Авторизуем админа
-    user.api.auth_api.authenticate({
-        "email": user.email,
-        "password": user.password
-    })
     return user
