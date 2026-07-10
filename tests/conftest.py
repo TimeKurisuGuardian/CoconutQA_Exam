@@ -4,10 +4,11 @@ from clients.api_manager import ApiManager
 from utils.data_generator import DataGenerator
 from entities.user import User
 from resources.user_creds import SuperAdminCreds
-# Полностью перешли на единый Enum из нашей Pydantic модели, старый Roles удален
 from models.user import UserCreationModel, UserRole
 import time
 import os
+from utils.db_client import get_db_session
+from utils.db_helpers import DBHelper
 
 # =====================================================================
 # СЕТЕВЫЕ СЕССИИ И МЕНЕДЖЕРЫ API
@@ -207,3 +208,27 @@ def admin_user(session, test_user):
         roles=[UserRole.ADMIN]
     )
     return user
+
+# --- НОВОЕ ---
+@pytest.fixture(scope="function")
+def db_session():
+    """Создает сессию базы данных на один тест и закрывает ее после"""
+    session = get_db_session()
+    yield session
+    session.close()
+
+@pytest.fixture(scope="function")
+def db_helper(db_session):
+    """Предоставляет готовый пульт DBHelper в тесты"""
+    return DBHelper(db_session)
+
+@pytest.fixture(scope="function")
+def created_test_user(db_helper):
+    """Автоматически создает случайного юзера перед тестом и удаляет его после"""
+    user_data = DataGenerator.generate_user_data()
+    user = db_helper.create_test_user(user_data)
+
+    yield user
+
+    if db_helper.get_user_by_id(user.id):
+        db_helper.delete_user(user)

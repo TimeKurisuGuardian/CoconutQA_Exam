@@ -1,4 +1,6 @@
 import random
+import datetime
+from uuid import uuid4
 from faker import Faker
 
 # Инициализация библиотеки Faker для генерации тестовых данных
@@ -46,4 +48,19 @@ class DataGenerator:
             "location": random.choice(["MSK", "SPB"]),
             "published": True,
             "genreId": random.randint(1, 5)
+        }
+
+    @staticmethod
+    def generate_user_data() -> dict:
+        """Генерирует словарь с уникальными данными для создания юзера в БД"""
+        return {
+            'id': f"{uuid4()}",
+            'email': DataGenerator.generate_random_email(),
+            'full_name': DataGenerator.generate_random_name(),
+            'password': DataGenerator.generate_random_password(),
+            'created_at': datetime.datetime.now(),
+            'updated_at': datetime.datetime.now(),
+            'verified': False,
+            'banned': False,
+            'roles': '{USER}'
         }
