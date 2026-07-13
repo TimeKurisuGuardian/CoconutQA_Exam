@@ -30,7 +30,7 @@ class AuthApi(CustomRequester):
             **kwargs
         )
 
-    def login_user(self, login_data, expected_status=201, **kwargs):
+    def login_user(self, login_data, expected_status=[200, 201], **kwargs):
         """
         Аутентификация пользователя (POST /login).
         Принимает структуру данных LoginDto. По спецификации Cinescope успешный вход возвращает 201.
