@@ -59,3 +59,12 @@ class TestUser:
         # Параметр expected_status=403 говорит реквестеру: мы ЖДЕМ ошибку 403.
         # Если бэкенд отдаст данные (вернет 200), реквестер сам уронит этот тест.
         api_manager.user_api.get_user_info(common_user.email, expected_status=403)
+
+    def test_check_me_endpoint_directly(self, api_manager, authenticated_user):
+        """Быстрый сисадминский тест для проверки эндпоинта /user/me"""
+
+        # Запрос делаем через api_manager!
+        response = api_manager.user_api.get_user_info(user_id="me")
+
+        assert response.status_code == 200, f"Ошибка! Бэк вернул код: {response.status_code}"
+        print(f"\n[УСПЕХ]: Эндпоинт /user/me работает! Текущий юзер в базе: {response.json().get('email')}")
