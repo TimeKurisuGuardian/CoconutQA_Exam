@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import allure
 from pydantic import BaseModel
 
 # Задаем ANSI-коды цветов напрямую, чтобы логи в консоли были цветными
@@ -38,23 +39,24 @@ class CustomRequester:
         url = f"{self.base_url}{endpoint}"
 
         # АВТОМАТИЧЕСКАЯ ВАЛИДАЦИЯ И СЕРИАЛИЗАЦИЯ ДАННЫХ:
-        # Если в качестве данных ('data') в метод пришла Pydantic-модель, мы перехватываем её.
         if isinstance(data, BaseModel):
-            # Переводим модель в JSON-строку (исключая незаполненные поля),
-            # а затем обратно в чистый питонячий словарь (dict), который понимает библиотека requests.
-            # Благодаря этому в самих тестах больше не нужно вручную писать .model_dump()!
             data = json.loads(data.model_dump_json(exclude_unset=True))
 
         # Отправляем реальный HTTP-запрос на сервер
         response = self.session.request(method, url, json=data, params=params, **kwargs)
 
-        # Если логгирование включено, отправляем ответ в метод форматирования curl
+        # Если логирование включено, отправляем ответ в метод форматирования
         if need_logging:
             self.log_request_and_response(response)
 
         # Автоматическая проверка статус-кода ответа сервера
-        if response.status_code != expected_status:
-            # Если статус-код не совпал с ожидаемым (например, получили 400 вместо 201),
+        if isinstance(expected_status, (list, tuple)):
+            is_status_error = response.status_code not in expected_status
+        else:
+            is_status_error = response.status_code != expected_status
+
+        if is_status_error:
+            # Если статус-код не совпал с ожидаемым,
             # принудительно выводим сырой текст ошибки от бэкенда в консоль для дебага
             print("\n" + "=" * 20 + " БЭКЕНД ВЕРНУЛ ОШИБКУ " + "=" * 20)
             print(response.text)
@@ -64,6 +66,7 @@ class CustomRequester:
             raise ValueError(
                 f"Unexpected status code: {response.status_code}. Expected: {expected_status}"
             )
+
         return response
 
     def _update_session_headers(self, headers: dict):
@@ -73,7 +76,8 @@ class CustomRequester:
     def log_request_and_response(self, response):
         """
         Форматированное логирование отправленного запроса и полученного ответа.
-        Преобразует отправленный HTTP-запрос в готовый curl-командный формат для быстрого дебага в терминале.
+        Преобразует отправленный HTTP-запрос в готовый curl-командный формат для быстрого дебага,
+        а также автоматически прикрепляет логи к Allure-отчёту.
         """
         try:
             request = response.request
@@ -93,14 +97,16 @@ class CustomRequester:
                     body = request.body
                 body = f"-d '{body}' \n" if body and body != '{}' else ''
 
-            # Записываем в лог красивый curl-запрос
-            self.logger.info(f"\n{'=' * 40} REQUEST {'=' * 40}")
-            self.logger.info(
-                f"{GREEN}{full_test_name}{RESET}\n"
+            # Формируем красивую строку curl для логов и Allure
+            curl_command = (
                 f"curl -X {request.method} '{request.url}' \\\n"
                 f"{headers} \\\n"
                 f"{body}"
             )
+
+            # Записываем в лог консоли красивый curl-запрос
+            self.logger.info(f"\n{'=' * 40} REQUEST {'=' * 40}")
+            self.logger.info(f"{GREEN}{full_test_name}{RESET}\n{curl_command}")
 
             response_status = response.status_code
             is_success = response.ok
@@ -110,22 +116,35 @@ class CustomRequester:
             try:
                 response_data = json.dumps(json.loads(response.text), indent=4, ensure_ascii=False)
             except json.JSONDecodeError:
-                pass  # Если сервер прислал не JSON, а обычный текст, оставляем как есть
+                pass
 
-            # Записываем в лог структурированный ответ от бэкенда
+            # Записываем в лог консоли структурированный ответ от бэкенда
             self.logger.info(f"\n{'=' * 40} RESPONSE {'=' * 40}")
             if not is_success:
-                # Если запрос неуспешный, то подсвечиваем статус и данные КРАСНЫМ цветом
                 self.logger.info(
                     f"\tSTATUS_CODE: {RED}{response_status}{RESET}\n"
                     f"\tDATA: {RED}{response_data}{RESET}"
                 )
             else:
-                # Если всё ок, то подсвечиваем статус ЗЕЛЕНЫМ цветом
                 self.logger.info(
                     f"\tSTATUS_CODE: {GREEN}{response_status}{RESET}\n"
                     f"\tDATA:\n{response_data}"
                 )
             self.logger.info(f"{'=' * 80}\n")
+
+            # --- ИНТЕГРАЦИЯ С ALLURE ---
+            # Прикрепляем curl-запрос к текущему шагу теста в Allure
+            allure.attach(
+                curl_command,
+                name=f"API Request: {request.method} {request.url.split('/')[-1]}",
+                attachment_type=allure.attachment_type.TEXT
+            )
+            # Прикрепляем JSON-ответ бэкенда к текущему шагу теста в Allure
+            allure.attach(
+                f"STATUS CODE: {response_status}\n\nDATA:\n{response_data}",
+                name=f"API Response: {response_status}",
+                attachment_type=allure.attachment_type.TEXT
+            )
+
         except Exception as e:
             self.logger.error(f"\nLogging failed: {type(e)} - {e}")
