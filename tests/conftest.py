@@ -109,7 +109,7 @@ def authenticated_admin(api_manager):
         "password": admin_password
     }
 
-    response = api_manager.auth_api.login_user(admin_creds, expected_status=201)
+    response = api_manager.auth_api.login_user(admin_creds, expected_status=200)
     token = response.json()["accessToken"]
 
     api_manager.movies.session.headers.update({"Authorization": f"Bearer {token}"})
