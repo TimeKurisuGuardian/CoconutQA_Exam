@@ -12,3 +12,4 @@ __pycache__/
 .env
 requirements.txt
 sandbox
+allure-results/
