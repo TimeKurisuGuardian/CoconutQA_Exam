@@ -10,6 +10,6 @@ __pycache__/
 *.csv
 *.env
 .env
-requirements.txt
 sandbox
 allure-results/
+files/

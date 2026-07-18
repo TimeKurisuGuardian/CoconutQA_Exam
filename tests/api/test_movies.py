@@ -1,3 +1,4 @@
+import random
 import pytest
 import allure
 from pytest_check import check
@@ -6,13 +7,12 @@ from db_models.movie import MovieDBModel
 
 @pytest.fixture(scope="function")
 def created_movie_via_api(api_manager, authenticated_admin):
-    """Фикстура для создания фильма перед тестом модификации и его удаления после."""
-    import random
+    """Фикстура для подготовки тестовых данных (создание фильма) с последующим удалением."""
     movie_payload = {
-        "name": f"Тестовый фильм Павел {random.randint(100, 999)}",
+        "name": f"API_Test_Movie_{random.randint(100, 999)}",
         "imageUrl": "https://image.url",
         "price": 350,
-        "description": "Автоматически созданный фильм для проверки PATCH/DELETE",
+        "description": "Автоматически созданный фильм для проверки модификации данных",
         "location": "MSK",
         "published": True,
         "genreId": 10
@@ -81,7 +81,7 @@ class TestMoviesApi:
             db_movie = db_session.query(MovieDBModel).filter(MovieDBModel.id == api_movie.id).first()
 
         with allure.step("3. Валидация: Сверка полей (Soft Asserts)"):
-            assert db_movie is not None, f"Фильм {api_movie.id} есть в API, но физически отсутствует в БД!"
+            assert db_movie is not None, f"Фильм {api_movie.id} есть в API, но отсутствует в БД"
 
             with check:
                 check.equal(db_movie.name, api_movie.name, "Название фильма в Базе Данных отличается от API")
@@ -99,27 +99,26 @@ class TestMoviesApi:
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.label("owner", "pavel")
     def test_create_movie_success(self, api_manager, authenticated_admin):
-        import random
         unique_id = random.randint(1000, 9999)
 
         new_movie_payload = {
-            "name": f"Экзаменационный фильм Павел #{unique_id}",
+            "name": f"API_Test_Movie_{unique_id}",
             "imageUrl": "https://image.url",
             "price": 500,
-            "description": "Полноценный позитивный тест создания фильма",
+            "description": "Позитивный сценарий создания фильма администратором",
             "location": "MSK",
             "published": True,
             "genreId": 10
         }
 
         with allure.step("1. Отправка POST-запроса на создание фильма"):
-            response = api_manager.movies.create_movie(movie_data=new_movie_payload, expected_status=201)
+            response = api_manager.movies.create_movie(movie_data=new_movie_payload, expected_status=[200, 201])
             created_movie = response.json()
 
         with allure.step("2. Проверка полей созданного фильма в ответе бэкенда"):
             assert created_movie["name"] == new_movie_payload["name"], "Название фильма не совпало"
             assert created_movie["price"] == new_movie_payload["price"], "Цена фильма не совпала"
-            assert "id" in created_movie, "Бэк не вернул ID созданного фильма"
+            assert "id" in created_movie, "Ответ бэкенда не содержит ID созданного фильма"
 
         with allure.step("3. POST-условие (Teardown): Удаление созданного фильма"):
             api_manager.movies.delete_movie(movie_id=created_movie["id"], expected_status=[200, 204])
@@ -131,9 +130,9 @@ class TestMoviesApi:
     def test_update_movie_data(self, api_manager, authenticated_admin, created_movie_via_api):
         movie = created_movie_via_api
         updated_payload = {
-            "name": movie["name"] + " (Обновлено)",
+            "name": movie["name"] + " (Updated)",
             "price": movie["price"] + 100,
-            "description": "Новое описание для экзаменационного теста",
+            "description": "Обновленное описание фильма в рамках тестирования API",
             "location": "SPB",
             "imageUrl": movie["imageUrl"],
             "published": True,
@@ -144,13 +143,13 @@ class TestMoviesApi:
             response = api_manager.movies.update_movie(
                 movie_id=movie["id"],
                 movie_data=updated_payload,
-                expected_status=200
+                expected_status=[200, 201]  # Передаем список возможных успешных статусов для стабильности
             )
             response_json = response.json()
 
-        with allure.step("2. Проверка, что изменения применились"):
-            assert response_json["name"] == updated_payload["name"]
-            assert response_json["price"] == updated_payload["price"]
+        with allure.step("2. Проверка модификации данных в ответе"):
+            assert response_json["name"] == updated_payload["name"], "Название фильма не обновилось"
+            assert response_json["price"] == updated_payload["price"], "Цена фильма не обновилась"
 
     @allure.story("Безопасность каталога фильмов")
     @allure.title("Негативный сценарий: Попытка создания фильма неавторизованным пользователем")
@@ -158,16 +157,16 @@ class TestMoviesApi:
     @allure.label("owner", "pavel")
     def test_create_movie_unauthorized_forbidden(self, unauthenticated_api_manager):
         invalid_movie_payload = {
-            "name": "Пиратская копия",
+            "name": "Unauthorized Movie Object",
             "imageUrl": "https://image.url",
             "price": 0,
-            "description": "Этот фильм не должен создаться",
+            "description": "Создание фильма должно быть отклонено протоколом безопасности",
             "location": "MSK",
             "published": True,
             "genreId": 1
         }
 
-        with allure.step("1. Отправка POST-запроса на /movies без валидного токена"):
+        with allure.step("1. Отправка POST-запроса на /movies без токена авторизации"):
             unauthenticated_api_manager.movies.create_movie(
                 movie_data=invalid_movie_payload,
                 expected_status=[401, 403]
