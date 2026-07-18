@@ -3,12 +3,12 @@ from config.base_urls import MOVIES_BASE_URL
 
 MOVIES = '/movies'
 
+
 class MoviesApi(CustomRequester):
     def __init__(self, session):
         super().__init__(session=session, base_url=MOVIES_BASE_URL)
 
-    def get_movies(self, params=None, expected_status=200, **kwargs): # Поменяли дефолт на 200
-        """1. GET /movies с поддержкой фильтров через params"""
+    def get_movies(self, params=None, expected_status=200, **kwargs):
         return self.send_request(
             method="GET",
             endpoint=MOVIES,
@@ -17,8 +17,8 @@ class MoviesApi(CustomRequester):
             **kwargs
         )
 
-    def create_movie(self, movie_data, expected_status=201, **kwargs): # Поменяли дефолт на 201
-        """2. POST /movies — Создание фильма"""
+    def create_movie(self, movie_data, expected_status=201, **kwargs):
+        # Явно передаем expected_status в send_request
         return self.send_request(
             method="POST",
             endpoint=MOVIES,
@@ -28,7 +28,7 @@ class MoviesApi(CustomRequester):
         )
 
     def update_movie(self, movie_id, movie_data, expected_status=200, **kwargs):
-        """PATCH /movies/{id} — Редактирование фильма"""
+        # Явно передаем expected_status в send_request
         return self.send_request(
             method="PATCH",
             endpoint=f"{MOVIES}/{movie_id}",
@@ -38,7 +38,6 @@ class MoviesApi(CustomRequester):
         )
 
     def delete_movie(self, movie_id, expected_status=200, **kwargs):
-        """4. DELETE /movies/{id} — Удаление фильма"""
         return self.send_request(
             method="DELETE",
             endpoint=f"{MOVIES}/{movie_id}",

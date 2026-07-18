@@ -1,0 +1,8 @@
+curl -X POST 'https://auth.dev-cinescope.coconutqa.ru/register' \
+-H 'User-Agent: python-requests/2.32.3' \
+-H 'Accept-Encoding: gzip, deflate' \
+-H 'Accept: application/json' \
+-H 'Connection: keep-alive' \
+-H 'Content-Type: application/json' \
+-H 'Content-Length: 147' \
+-d '{"email": "pavelqa498878@gmail.com", "fullName": "Douglas Briggs", "password": "3ub6nstAH6Kp", "passwordRepeat": "3ub6nstAH6Kp", "roles": ["USER"]}' 

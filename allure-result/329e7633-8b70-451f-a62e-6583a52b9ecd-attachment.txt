@@ -1,0 +1,8 @@
+curl -X POST 'https://auth.dev-cinescope.coconutqa.ru/register' \
+-H 'User-Agent: python-requests/2.32.3' \
+-H 'Accept-Encoding: gzip, deflate' \
+-H 'Accept: application/json' \
+-H 'Connection: keep-alive' \
+-H 'Content-Type: application/json' \
+-H 'Content-Length: 148' \
+-d '{"email": "pavelqa780934@gmail.com", "fullName": "Andrew Hill DVM", "password": "4Cd8cuWoMOP0", "passwordRepeat": "4Cd8cuWoMOP0", "roles": ["USER"]}' 

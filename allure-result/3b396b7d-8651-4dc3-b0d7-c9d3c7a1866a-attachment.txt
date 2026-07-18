@@ -1,0 +1,13 @@
+STATUS CODE: 201
+
+DATA:
+{
+    "id": "bca4d38c-d449-4bdd-9f15-00b066f582e9",
+    "email": "pavelqa780934@gmail.com",
+    "fullName": "Andrew Hill DVM",
+    "verified": true,
+    "roles": [
+        "USER"
+    ],
+    "createdAt": "2026-07-18T12:13:19.923Z"
+}
